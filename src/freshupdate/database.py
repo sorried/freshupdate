@@ -114,6 +114,10 @@ class Database:
         row = self.connection.execute("SELECT value FROM metadata WHERE key=?", (key,)).fetchone()
         return row[0] if row else None
 
+    def set_metadata(self, key: str, value: str) -> None:
+        with self.connection:
+            self.connection.execute("INSERT OR REPLACE INTO metadata VALUES (?, ?)", (key, value))
+
     def ingest_releases(
         self,
         releases: list[dict[str, Any]],
