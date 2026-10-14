@@ -5,7 +5,7 @@ from freshupdate.config import Config, ConfigurationError
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("freshupdate.config.load_dotenv", lambda: None)
+    monkeypatch.setattr("freshupdate.config.load_dotenv", lambda *args: None)
     for name in (
         "BOT_TOKEN",
         "GITHUB_REPOSITORY",

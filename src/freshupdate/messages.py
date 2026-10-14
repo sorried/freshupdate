@@ -50,10 +50,23 @@ def plain_text(value: str, limit: int) -> str:
     return value if len(value) <= limit else value[: limit - 1].rstrip() + "…"
 
 
+def html_text(value: str, limit: int) -> str:
+    characters = []
+    length = 0
+    for character in plain_text(value, limit):
+        escaped = escape(character, quote=False)
+        units = len(escaped.encode("utf-16-le")) // 2
+        if length + units > limit - 1:
+            return "".join(characters) + "…"
+        characters.append(escaped)
+        length += units
+    return "".join(characters)
+
+
 def release_message(release: dict[str, Any]) -> tuple[str, InlineKeyboardMarkup]:
-    title = escape(plain_text(release["name"], 160))
-    version = escape(plain_text(release["tag_name"], 100))
-    description = escape(plain_text(release["body"], 700)) or "описание изменений не опубликовано."
+    title = html_text(release["name"], 300)
+    version = html_text(release["tag_name"], 200)
+    description = html_text(release["body"], 1800) or "описание изменений не опубликовано."
     published = datetime.fromisoformat(release["published_at"].replace("Z", "+00:00"))
     release_url = release["html_url"]
     repository_url = release_url.split("/releases/tag/", 1)[0]
@@ -61,7 +74,7 @@ def release_message(release: dict[str, Any]) -> tuple[str, InlineKeyboardMarkup]
         f"(｡•̀ᴗ-)✧ <b>новый релиз freshGram!</b>\n\n<b>{title}</b>\n"
         f"версия: <code>{version}</code>\n"
         f"опубликован: {published:%d.%m.%Y %H:%M} utc\n\n{description}\n\n"
-        f'<a href="{escape(release_url, quote=True)}">полное описание релиза</a>'
+        "полное описание и файлы доступны по кнопке ниже."
     )
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[

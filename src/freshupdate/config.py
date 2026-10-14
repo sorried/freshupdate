@@ -21,7 +21,7 @@ class Config:
 
     @classmethod
     def from_env(cls) -> "Config":
-        load_dotenv()
+        load_dotenv(Path.cwd() / ".env")
         token = os.getenv("BOT_TOKEN", "").strip()
         if not re.fullmatch(r"[1-9]\d{4,}:[A-Za-z0-9_-]{30,}", token):
             raise ConfigurationError("BOT_TOKEN отсутствует или имеет неверный формат.")

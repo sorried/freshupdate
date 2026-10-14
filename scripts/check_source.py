@@ -24,7 +24,18 @@ def check_files(root: Path) -> list[str]:
                         violations.append(f"{path}: docstring")
             if re.search(r"\b\d{8,}:[A-Za-z0-9_-]{30,}\b", source):
                 violations.append(f"{path}: possible bot token")
-    for pattern in ("*.toml", "*.yaml", ".github/**/*.yml", "Dockerfile", ".env.example"):
+    for pattern in (
+        "*.toml",
+        "*.yaml",
+        ".github/**/*.yml",
+        "Dockerfile",
+        ".env.example",
+        "*.txt",
+        "*.lock",
+        ".gitignore",
+        ".dockerignore",
+        "deploy/*.service",
+    ):
         for path in root.glob(pattern):
             if any(line.lstrip().startswith("#") for line in path.read_text().splitlines()):
                 violations.append(f"{path}: comment")
