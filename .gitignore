@@ -24,3 +24,7 @@ credentials.json
 *.tmp
 .idea/
 .vscode/
+node_modules/
+build-test/
+*.tsbuildinfo
+npm-debug.log*
