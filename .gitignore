@@ -17,6 +17,7 @@ data/
 *.db-*
 *.sqlite*
 *.log
+.kilo/
 *.pem
 *.key
 credentials.json
