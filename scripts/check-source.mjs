@@ -9,7 +9,11 @@ const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclud
   .split("\n");
 const violations = [];
 for (const file of new Set(files)) {
-  if (!file || file === "LICENSE" || file.endsWith(".md") || file.endsWith(".py")) continue;
+  if (!file || file === "LICENSE" || file.endsWith(".md")) continue;
+  if (file.endsWith(".py")) {
+    violations.push(`${file}: legacy Python source`);
+    continue;
+  }
   const source = readFileSync(file, "utf8");
   if (/\.(ts|mjs)$/.test(file)) {
     const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);

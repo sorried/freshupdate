@@ -46,7 +46,7 @@ export async function run(
         method === "getUpdates" ? requestSignal : telegramSignal(signal),
       );
     });
-    await bot.init(telegramSignal(signal));
+    bot.botInfo = await bot.api.getMe(telegramSignal(signal));
     console.info(`Authenticated bot @${bot.botInfo.username} (bot ID ${bot.botInfo.id})`);
     const webhook = await bot.api.getWebhookInfo(telegramSignal(signal));
     if (webhook.url)

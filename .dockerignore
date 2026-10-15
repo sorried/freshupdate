@@ -1,10 +1,8 @@
 *
 !Dockerfile
-!requirements.txt
-!pyproject.toml
-!README.md
+!package.json
+!package-lock.json
+!tsconfig.json
 !LICENSE
 !src/
-!src/**
-src/**/__pycache__/
-src/**/*.pyc
+!src/*.ts

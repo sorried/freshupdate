@@ -2,7 +2,9 @@
 
 независимый telegram-бот для уведомлений о новых релизах [freshGram](https://github.com/Snowy-Fluffy/freshGram). запуск бота в личном чате включает уведомления, без подписки на каналы и дополнительных проверок.
 
-independent telegram release notifications for freshGram, backed by sqlite.
+бот: [@freshupdbot](https://t.me/freshupdbot). идентичность подтверждена через telegram `getMe`, id бота `8754181443`. это не подтверждает, что production-процесс уже запущен.
+
+independent telegram release notifications for freshGram, built with typescript, grammY and sqlite.
 
 [возможности](#возможности) · [запуск](#быстрый-запуск-на-linux) · [docker](#docker-compose) · [конфигурация](#конфигурация) · [безопасность](#безопасность-и-данные) · [разработка](#разработка)
 
@@ -16,7 +18,8 @@ independent telegram release notifications for freshGram, backed by sqlite.
 - sqlite для пользователей, релизов, очереди рассылки и антиспама;
 - восстановление очереди и блокировок после рестарта;
 - etag для каждой страницы github api, ограниченные повторы и соблюдение rate limit;
-- python-запуск на linux/vps и docker compose без внешней базы данных.
+- node.js-запуск на linux/vps и docker compose без внешней базы данных;
+- typescript с `strict: true`, grammY, better-sqlite3 и встроенный `fetch`.
 
 ## команды
 
@@ -56,17 +59,15 @@ independent telegram release notifications for freshGram, backed by sqlite.
 
 ## быстрый запуск на linux
 
-нужны python 3.11-3.14, git и доступ по https к github и telegram. токен существующего бота получите через botfather. не публикуйте его в issue, логах или git.
+нужны node.js 22+, npm, git и доступ по https к github и telegram. ci проверяет node.js 22, 24 и 26. токен существующего бота получите через botfather. не публикуйте его в issue, логах или git.
 
 пока изменения проходят ревью, используйте ветку `dev`:
 
 ```bash
 git clone -b dev https://github.com/sorried/freshupdate.git
 cd freshupdate
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install --require-hashes -r requirements.txt
-python -m pip install --no-deps .
+npm ci --ignore-scripts
+npm run build
 cp .env.example .env
 chmod 600 .env
 ```
@@ -74,12 +75,12 @@ chmod 600 .env
 заполните `BOT_TOKEN` в `.env`, затем:
 
 ```bash
-python -m freshupdate
+npm start
 ```
 
-можно использовать установленную команду `freshupdate`. запускать нужно из каталога проекта, чтобы `.env` и относительный `DATABASE_PATH` разрешались предсказуемо. при отсутствии или явно неправильном токене приложение завершается с понятным сообщением без traceback.
+можно запускать напрямую `node dist/main.js`. запускать нужно из каталога проекта, чтобы `.env` и относительный `DATABASE_PATH` разрешались предсказуемо. `.env` загружается встроенным `process.loadEnvFile`, отдельная зависимость не нужна. при отсутствии или явно неправильном токене приложение завершается с понятным сообщением без stack trace. better-sqlite3 13 поставляет готовые native-бинарники для поддерживаемых платформ; docker использует debian linux. на неподдерживаемой платформе потребуется отдельная сборка native-модуля.
 
-при запуске выполняется telegram `getMe`, в журнал выводятся только подтверждённые username и id самого бота. id бота не используется как id подписчика. имеющийся в справочной информации username `@freshupdbot` не считается подтверждённым до проверки токена. приложение не создаёт нового бота и не меняет профиль автоматически.
+при запуске выполняется telegram `getMe`, в журнал выводятся только подтверждённые username и id самого бота. id бота не используется как id подписчика. локальный токен проверен и соответствует `@freshupdbot`; после замены токена приложение проверяет идентичность заново. приложение не создаёт нового бота и не меняет профиль автоматически.
 
 если установлен webhook, приложение прекращает запуск, не удаляя его самостоятельно. отключите старый webhook через bot api `deleteWebhook`, сохраняя ожидающие обновления. имя и описание можно настроить через botfather владельцем бота. проверьте, что старые индивидуальные или языковые меню команд удалены: приложение регистрирует только `start` и `about` в стандартном меню.
 
@@ -94,7 +95,7 @@ sudo systemctl enable --now freshupdate
 sudo journalctl -u freshupdate -f
 ```
 
-файл сервиса - пример для установки, не признак уже выполненного развёртывания. приложение завершает фоновые задачи и закрывает http-сессии и базу при sigterm. файловая блокировка запрещает второй процесс с той же базой. не запускайте несколько экземпляров с одним токеном и разными базами: telegram polling и рассылки будут конфликтовать.
+файл сервиса - пример для установки, не признак уже выполненного развёртывания. он ожидает node.js в `/usr/bin/node`, при другом пути измените `ExecStart`. приложение останавливает polling, отменяет запросы и фоновые задачи через `AbortSignal`, затем закрывает sqlite при sigterm. аренда экземпляра в sqlite запрещает второй процесс с той же базой. срок аренды 120 секунд, обновление каждые 30 секунд. после аварийного завершения новый процесс может потребовать до двух минут ожидания. не запускайте несколько экземпляров с одним токеном и разными базами: telegram polling и рассылки будут конфликтовать.
 
 ## docker compose
 
@@ -133,33 +134,45 @@ sqlite использует параметризованные запросы, w
 
 внешний текст github не исполняется. html экранируется, описание показывается как обычный текст, без интерпретации markdown. разрешены ссылки конкретного github-репозитория. обычные эмодзи из описаний убираются; полное оригинальное описание доступно по ссылке.
 
-`.env`, базы, окружение, кэш, ключи и локальные логи исключены из git и docker build context. зависимости закреплены в `pyproject.toml` и `uv.lock`; файлы requirements экспортированы с хешами. docker-образ и github actions закреплены по digest и commit sha. обновляйте их после проверки исправлений безопасности.
+`.env`, базы, окружение, кэш, ключи и локальные логи исключены из git и docker build context. зависимости закреплены в `package.json` и `package-lock.json`, установка выполняется через `npm ci`. lifecycle-скрипты зависимостей отключены. docker-образ и github actions закреплены по digest и commit sha. обновляйте их после проверки исправлений безопасности.
 
 ## разработка
 
 ```bash
-python -m pip install --require-hashes -r requirements-dev.txt
-python -m pip install --no-deps .
-pytest
-ruff check .
-ruff format --check .
-python scripts/check_source.py
-python -m pip check
+npm ci --ignore-scripts
+npm run check
+npm audit
 ```
 
 тесты используют временную sqlite и моки внешних api, не требуют `BOT_TOKEN` и не отправляют сообщения. проверяются регистрация, исходное состояние, очередь, etag, ошибки api, безопасный текст, лимиты доставки, sliding window, рестарты и параллельные транзакции.
 
-`scripts/check_source.py` проверяет отсутствие python-комментариев, docstrings и комментариев конфигурации. readme и самостоятельная документация могут содержать пояснения. ci запускает pytest и ruff на python 3.11-3.14, проверяет исходники и собирает docker при push в `dev` и pull request в `main`.
+`npm run check` запускает строгую типизацию, biome, проверку исходников, typescript-тесты через встроенный `node:test` и production-сборку. отдельно доступны `npm run typecheck`, `npm run lint`, `npm test`, `npm run build` и `npm run format`.
 
-при обновлении зависимостей экспортируйте файлы из актуального lock:
+`scripts/check-source.mjs` проверяет отсутствие комментариев, включая jsdoc, и случайных секретов в коде и конфигурации. readme и самостоятельная документация могут содержать пояснения. ci выполняет полный набор проверок на node.js 22, 24 и 26, проверяет production-зависимости через `npm audit` и собирает docker при push в `dev` и pull request в `main`.
+
+при обновлении зависимостей меняйте закреплённые версии и lock вместе, затем повторяйте проверки:
 
 ```bash
-uv lock
-uv export --frozen --no-header --no-annotate --no-emit-project -o requirements.txt
-uv export --frozen --extra dev --no-header --no-annotate --no-emit-project -o requirements-dev.txt
+npm install --save-exact grammy@1.46.0 better-sqlite3@13.0.3 --ignore-scripts
+npm run check
+npm audit
 ```
 
-структура приложения: `config`, `database`, `github`, `tracker`, `handlers`, `antispam`, `messages`, `delivery` и `__main__`. изменения публикуются в `dev` логическими коммитами. pull request в `main` остаётся открытым до явного подтверждения владельца.
+структура приложения: `config`, `database`, `github`, `tracker`, `handlers`, `antispam`, `messages`, `delivery`, `runtime` и `main`. `telegram-signal` согласует native `AbortSignal` с устаревшим типом сигнала в grammY, без `any` и дополнительной зависимости. изменения публикуются в `dev` логическими коммитами. pull request в `main` остаётся открытым до явного подтверждения владельца.
+
+## переход с python-версии
+
+остановите старый процесс, сделайте резервную копию sqlite и обновите приложение. путь `DATABASE_PATH` и docker volume должны остаться прежними. схема таблиц, json-поля релизов и время в секундах совместимы с python-версией: пользователи, история релизов, незавершённые доставки и jail сохраняются. повторная инициализация старых релизов не выполняется.
+
+docker-пользователь node имеет uid 1000, старая версия использовала uid 10001. для существующего volume после остановки старого контейнера нужно один раз изменить владельца:
+
+```bash
+docker compose build
+docker compose run --rm --no-deps --user root --cap-add CHOWN bot chown -R node:node /app/data
+docker compose up -d
+```
+
+не удаляйте volume и не запускайте старую и новую версии одновременно. python-код и зависимости больше не нужны; старое локальное виртуальное окружение можно удалить самостоятельно после успешного перехода.
 
 ## источники и лицензия
 

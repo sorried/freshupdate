@@ -162,3 +162,33 @@ test("repository change rolls back release ingestion and cache", (context) => {
   assert.equal(database.getMetadata("github_cache"), "old");
   assert.equal(database.connection.prepare("SELECT * FROM releases").all().length, 0);
 });
+
+test("legacy Python payloads and timestamp formats retain queue and jail state", (context) => {
+  const { database, path } = temporaryDatabase(context);
+  const payload = { ...release(1), published_at: "2026-10-01T12:00:00+00:00" };
+  database.connection
+    .prepare("INSERT INTO users VALUES (?, ?, ?, ?, ?)")
+    .run(123456789012, 1, 100, 1, 400);
+  database.connection
+    .prepare("INSERT INTO releases VALUES (?, ?, ?)")
+    .run(1, payload.published_at, JSON.stringify(payload));
+  database.connection
+    .prepare("INSERT INTO deliveries VALUES (?, ?, ?, ?, ?)")
+    .run(1, 123456789012, "pending", 1, 160);
+  database.setMetadata("repository", repository);
+  database.setMetadata("github_cache", "{}");
+  database.close();
+  const restored = new Database(path);
+  try {
+    assert.equal(restored.getUser(123456789012)?.first_seen_at, 1);
+    assert.equal(restored.checkCommand(123456789012, "about", 399), "blocked");
+    assert.equal(restored.checkCommand(123456789012, "about", 400), "allowed");
+    assert.equal(restored.nextDelivery(159), undefined);
+    assert.equal(restored.nextDelivery(160)?.attempts, 1);
+    assert.equal(restored.ingestReleases([release(1)], repository, "{}", true), 0);
+    restored.finishDelivery(1, 123456789012, "sent");
+    assert.equal(restored.nextDelivery(400), undefined);
+  } finally {
+    restored.close();
+  }
+});
