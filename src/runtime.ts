@@ -3,6 +3,7 @@ import { Bot } from "grammy";
 import { type Config, ConfigurationError } from "./config.js";
 import { Database } from "./database.js";
 import { DeliveryWorker } from "./delivery.js";
+import { ErrorReporter } from "./errors.js";
 import { GitHubClient } from "./github.js";
 import { registerHandlers } from "./handlers.js";
 import { telegramSignal } from "./telegram-signal.js";
@@ -15,8 +16,15 @@ export async function run(
   bot = new Bot(config.botToken, {
     client: { timeoutSeconds: 30, sensitiveLogs: false },
   }),
+  reporter = new ErrorReporter(bot.api, [config.botToken, config.githubToken]),
 ): Promise<void> {
-  const database = new Database(config.databasePath);
+  let database: Database;
+  try {
+    database = new Database(config.databasePath);
+  } catch (error) {
+    await reporter.report("runtime", error);
+    throw error;
+  }
   const owner = randomUUID();
   const controller = new AbortController();
   const signal = AbortSignal.any([shutdown, controller.signal]);
@@ -59,14 +67,20 @@ export async function run(
       {},
       telegramSignal(signal),
     );
-    registerHandlers(bot, database);
+    registerHandlers(
+      bot,
+      database,
+      reporter,
+      new GitHubClient(config.repository, config.githubToken),
+    );
     const tracker = new ReleaseTracker(
       database,
       new GitHubClient(config.repository, config.githubToken),
       config.checkInterval,
       config.includePrereleases,
+      reporter,
     );
-    const delivery = new DeliveryWorker(database, bot.api, config.repository);
+    const delivery = new DeliveryWorker(database, bot.api, config.repository, nowSeconds, reporter);
     const heartbeat = async (): Promise<void> => {
       while (!signal.aborted) {
         database.refreshLease(owner, nowSeconds());
@@ -74,20 +88,26 @@ export async function run(
       }
     };
     const watch = (task: Promise<void>): Promise<void> =>
-      task.catch((error: unknown) => {
+      task.catch(async (error: unknown) => {
         if (!signal.aborted) {
+          await reporter.report("runtime", error);
           controller.abort();
           throw error;
         }
       });
     tasks.push(watch(heartbeat()), watch(tracker.run(signal)), watch(delivery.run(signal)));
     tasks.push(
-      bot.start({ allowed_updates: ["message", "callback_query"], timeout: 20 }).finally(() => {
-        controller.abort();
-      }),
+      watch(
+        bot.start({ allowed_updates: ["message", "callback_query"], timeout: 20 }).then(() => {
+          controller.abort();
+        }),
+      ),
     );
     if (signal.aborted) stop();
     await Promise.all(tasks);
+  } catch (error) {
+    if (!shutdown.aborted) await reporter.report("runtime", error);
+    throw error;
   } finally {
     controller.abort();
     await Promise.allSettled([...tasks, ...(stopping ? [stopping] : [])]);

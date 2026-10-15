@@ -1,4 +1,5 @@
 import type { Database } from "./database.js";
+import type { ErrorReporter } from "./errors.js";
 import { type GitHubClient, GitHubError } from "./github.js";
 import { nowSeconds, sleep } from "./timing.js";
 
@@ -8,6 +9,7 @@ export class ReleaseTracker {
     private readonly github: GitHubClient,
     private readonly interval: number,
     private readonly includePrereleases: boolean,
+    private readonly reporter?: ErrorReporter,
   ) {}
 
   async pollOnce(signal?: AbortSignal): Promise<number> {
@@ -39,6 +41,7 @@ export class ReleaseTracker {
         failures = Math.min(failures + 1, 6);
         delay = Math.max(this.interval, error.retryAfter, Math.min(3600, 30 * 2 ** failures));
         console.warn(`${error.message}; retrying in ${Math.ceil(delay)} seconds`);
+        await this.reporter?.report("github", error);
       }
       await sleep(delay, signal);
     }

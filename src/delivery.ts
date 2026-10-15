@@ -1,5 +1,6 @@
 import { type Api, GrammyError, HttpError } from "grammy";
 import type { Database } from "./database.js";
+import { ErrorReporter } from "./errors.js";
 import { releaseMessage } from "./messages.js";
 import { parseRelease } from "./releases.js";
 import { telegramSignal } from "./telegram-signal.js";
@@ -13,6 +14,7 @@ export class DeliveryWorker {
     private readonly api: Pick<Api, "sendMessage">,
     private readonly repository: string,
     private readonly now: () => number = nowSeconds,
+    private readonly reporter = new ErrorReporter(api),
   ) {}
 
   async deliverOnce(signal?: AbortSignal): Promise<boolean> {
@@ -66,6 +68,7 @@ export class DeliveryWorker {
       } else {
         throw error;
       }
+      await this.reporter.report("delivery", error);
     }
     return true;
   }

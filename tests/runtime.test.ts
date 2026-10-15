@@ -68,7 +68,7 @@ test("existing webhook is preserved and startup exits", async (context) => {
     return method === "getMe" ? botInfo : { url: "https://example.com/hook" };
   });
   await assert.rejects(run(config, new AbortController().signal, bot), /webhook/);
-  assert.deepEqual(methods, ["getMe", "getWebhookInfo"]);
+  assert.deepEqual(methods, ["getMe", "getWebhookInfo", "sendMessage"]);
   const restored = new Database(path);
   assert.equal(restored.getMetadata("instance_owner"), undefined);
   restored.close();

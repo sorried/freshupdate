@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { type TestContext, test } from "node:test";
 import { Api, GrammyError, HttpError } from "grammy";
 import { DeliveryWorker } from "../src/delivery.js";
+import { ownerId } from "../src/errors.js";
 import { isRecord } from "../src/releases.js";
 import { release, repository, temporaryDatabase } from "./fixtures.js";
 import { mockApi } from "./telegram.js";
@@ -19,6 +20,7 @@ function apiWithErrors(errors: (Error | undefined)[]) {
   const calls: number[] = [];
   mockApi(api, (method, payload) => {
     assert.equal(method, "sendMessage");
+    if (isRecord(payload) && payload.chat_id === ownerId) return true;
     const error = errors.shift();
     calls.push(Number(isRecord(payload) ? payload.chat_id : 0));
     if (error) throw error;
