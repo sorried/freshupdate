@@ -1,0 +1,30 @@
+{
+  "name": "freshgram-updates-notify",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Independent Telegram notifications for freshGram releases",
+  "license": "GPL-3.0-only",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test build-test/tests/*.test.js",
+    "lint": "biome check . && node scripts/check-source.mjs",
+    "format": "biome check --write .",
+    "start": "node dist/main.js",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+  },
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "grammy": "1.46.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "22.20.5",
+    "typescript": "6.0.3"
+  }
+}
