@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { Bot } from "grammy";
 import type { Update } from "grammy/types";
 import { registerhandlers } from "../src/handlers.js";
+import { aboutmessage, jailmessage, startmessage } from "../src/messages.js";
 import { isrecord } from "../src/releases.js";
 import { temporarydatabase } from "./fixtures.js";
 import { botinfo, mockapi } from "./telegram.js";
@@ -36,7 +37,7 @@ test("parallel command handling sends one jail warning then remains silent", asy
     Array.from({ length: 10 }, (_, index) => bot.handleUpdate(message(index, "start"))),
   );
   assert.equal(replies.length, 4);
-  assert.equal(replies.filter((reply) => reply.includes("спам")).length, 1);
+  assert.equal(replies.filter((reply) => reply === jailmessage).length, 1);
   assert.equal(database.getuser(1)?.user_id, 1);
 });
 
@@ -83,6 +84,38 @@ test("about button uses the command counter and ignores further blocked requests
       },
     });
   }
-  assert.equal(replies.length, 4);
-  assert.equal(replies.filter((reply) => reply.includes("спам")).length, 1);
+  assert.equal(replies.length, 3);
+  assert.equal(replies.filter((reply) => reply === jailmessage).length, 0);
+});
+
+test("about and back buttons edit the original message without sending new messages", async (context) => {
+  const { database } = temporarydatabase(context);
+  const bot = new Bot(`123456789:${"a".repeat(35)}`, { botInfo: botinfo });
+  const edits: Record<string, unknown>[] = [];
+  let sent = 0;
+  mockapi(bot.api, (method, payload) => {
+    if (method === "sendMessage") sent += 1;
+    if (method === "editMessageText" && isrecord(payload)) edits.push(payload);
+    return true;
+  });
+  registerhandlers(bot, database);
+  for (const [index, action] of ["about", "start"].entries()) {
+    const original = message(42, "start").message;
+    assert.ok(original);
+    await bot.handleUpdate({
+      update_id: index + 1,
+      callback_query: {
+        id: String(index),
+        from: { id: 1, is_bot: false, first_name: "test" },
+        chat_instance: "instance",
+        data: action,
+        message: original,
+      },
+    });
+  }
+  assert.equal(sent, 0);
+  assert.equal(edits.length, 2);
+  assert.equal(edits[0]?.text, aboutmessage);
+  assert.equal(edits[1]?.text, startmessage);
+  for (const edit of edits) assert.equal(edit.message_id, 42);
 });

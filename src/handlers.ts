@@ -1,4 +1,4 @@
-import { type Bot, type Context, GrammyError, HttpError } from "grammy";
+import { type Bot, type Context, GrammyError, HttpError, InlineKeyboard } from "grammy";
 import { checkcommand } from "./antispam.js";
 import type { Command, Database } from "./database.js";
 import { ErrorReporter, ownerid } from "./errors.js";
@@ -73,15 +73,37 @@ export function registerhandlers(
       link_preview_options: { is_disabled: true },
     });
   });
-  bot.callbackQuery("about", async (context) => {
+  bot.callbackQuery(["about", "start"], async (context) => {
     if (context.chat?.type !== "private") return;
+    const command = context.callbackQuery.data === "start" ? "start" : "about";
+    const decision = checkcommand(database, context.from.id, command);
     try {
-      await context.answerCallbackQuery();
+      await context.answerCallbackQuery({
+        ...(decision !== "allowed"
+          ? { text: "небольшая пауза для команд. попробуй чуть позже, подписка работает." }
+          : {}),
+      });
     } catch (error) {
       if (!(error instanceof GrammyError || error instanceof HttpError)) throw error;
       await reporter.report("callback", error);
     }
-    await replytocommand(context, database, "about", reporter);
+    if (decision !== "allowed") return;
+    try {
+      await context.editMessageText(command === "start" ? startmessage : aboutmessage, {
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+        reply_markup:
+          command === "start" ? startkeyboard() : new InlineKeyboard().text("назад", "start"),
+      });
+    } catch (error) {
+      if (
+        error instanceof GrammyError &&
+        error.error_code === 400 &&
+        error.description.includes("message is not modified")
+      )
+        return;
+      throw error;
+    }
   });
   bot.catch(({ ctx, error }) => reporter.handleupdate(ctx, error));
 }
